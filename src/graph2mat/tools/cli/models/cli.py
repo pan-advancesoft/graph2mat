@@ -1,6 +1,7 @@
 import typer
 
 from .mace.cli import app as mace_app
+from .nanopet.cli import app as nanopet_app
 
 app = typer.Typer(
     help="""
@@ -13,6 +14,7 @@ NOTE: We did a
 )
 
 app.add_typer(mace_app, name="mace")
+app.add_typer(nanopet_app, name="nanopet")
 
 if __name__ == "__main__":
     app()
