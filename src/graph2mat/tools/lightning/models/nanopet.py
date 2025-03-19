@@ -83,7 +83,7 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
                 }
             },
             "per_atom": True,
-            "num_subtargets": 20,
+            "num_subtargets": 40,
             "quantity": "matrix",
             "unit": "eV",
         }
@@ -100,7 +100,7 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
             hypers,
             DatasetInfo(
                 length_unit="angstrom",
-                atomic_types=[0, 1],
+                atomic_types=torch.arange(len(self.basis_table.basis)),
                 targets={
                     "matrix": target_info,
                 },

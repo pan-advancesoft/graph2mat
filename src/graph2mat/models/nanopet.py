@@ -79,7 +79,7 @@ class MatrixNanoPET(torch.nn.Module):
             types = example["point_types"]
             positions = example["positions"]
             cell = example["cell"]
-            pbc = torch.tensor([True, True, True])
+            pbc = torch.tensor([True, True, True], device=cell.device)
 
             system = System(types, positions, cell, pbc)
 
