@@ -72,6 +72,7 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
         if isinstance(edge_hidden_irreps, str):
             edge_hidden_irreps = o3.Irreps(edge_hidden_irreps)
 
+        num_subtargets = 40
         target = {
             "type": {
                 "spherical": {
@@ -83,7 +84,7 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
                 }
             },
             "per_atom": True,
-            "num_subtargets": 40,
+            "num_subtargets": num_subtargets,
             "quantity": "matrix",
             "unit": "eV",
         }
@@ -107,6 +108,61 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
             ),
         )
 
+        from graph2mat.bindings.torch import TorchMatrixBlock, TorchGraph2Mat
+
+        class MyG2M(TorchGraph2Mat):
+            def __init__(self, irreps, **kwargs):
+                kwargs["matrix_block_cls"] = TorchMatrixBlock
+                super().__init__(**kwargs)
+
+        class NodeOp(torch.nn.Module):
+            def __init__(self, i_basis, j_basis, symmetry):
+                super().__init__()
+                self.in_dim = num_subtargets * (1 + 3 + 5)
+                self.out_shape = (len(i_basis), len(j_basis))
+                self.symmetry = symmetry
+
+                # self.linear = torch.nn.Linear(self.in_dim, 10 * self.out_shape[0])
+                self.linear = torch.nn.Linear(
+                    self.in_dim, self.out_shape[0] * self.out_shape[0]
+                )
+
+                # self.linear = torch.nn.Sequential(
+                #     torch.nn.Linear(self.in_dim, 100),
+                #     torch.nn.ReLU(),
+                #     torch.nn.Linear(100, self.out_shape[0] * self.out_shape[0]),
+                # )
+
+            def forward(self, node_feats):
+                out = self.linear(node_feats)
+
+                # out = out.reshape(-1, 10, self.out_shape[0])
+                # return torch.einsum("bnx, bny -> bxy", out, out)
+
+                out = out.reshape(-1, self.out_shape[0], self.out_shape[0])
+
+                return out
+
+        class EdgeOp(torch.nn.Module):
+            def __init__(self, i_basis, j_basis, symmetry):
+                super().__init__()
+                self.in_dim = num_subtargets * (1 + 3 + 5)
+                self.out_shape = (len(i_basis), len(j_basis))
+
+                self.linear1 = torch.nn.Linear(self.in_dim, 10 * self.out_shape[0])
+                self.linear2 = torch.nn.Linear(self.in_dim, 10 * self.out_shape[1])
+
+            def forward(self, node_feats):
+                out1 = self.linear1(node_feats[0]).reshape(-1, 10, self.out_shape[0])
+                out2 = self.linear2(node_feats[1]).reshape(-1, 10, self.out_shape[1])
+
+                return torch.einsum("bnx, bny -> bxy", out1, out2)
+
+        node_block_readout = NodeOp
+        edge_block_readout = EdgeOp
+        graph2mat_cls = MyG2M
+        # graph2mat_cls = E3nnGraph2Mat
+
         self.init_model(
             nanopet=nanopet,
             readout_per_interaction=readout_per_interaction,
@@ -118,6 +174,7 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
             preprocessing_edges_reuse_nodes=preprocessing_edges_reuse_nodes,
             node_operation=node_block_readout,
             edge_operation=edge_block_readout,
+            graph2mat_cls=graph2mat_cls,
         )
 
     def configure_optimizers(self):

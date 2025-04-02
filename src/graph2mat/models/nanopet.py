@@ -10,7 +10,9 @@ from e3nn import o3
 
 import torch
 
+from graph2mat import Graph2Mat
 from graph2mat.bindings.e3nn import E3nnGraph2Mat
+from graph2mat.bindings.torch import TorchGraph2Mat
 
 
 def tensormap_to_e3nn(tmap):
@@ -47,7 +49,11 @@ class MatrixNanoPET(torch.nn.Module):
     """Model that wraps a MACE model to produce a matrix output."""
 
     def __init__(
-        self, nanopet: NanoPET, readout_per_interaction: bool = False, **kwargs
+        self,
+        nanopet: NanoPET,
+        readout_per_interaction: bool = False,
+        graph2mat_cls: type[Graph2Mat] = TorchGraph2Mat,
+        **kwargs,
     ):
         super().__init__()
 
@@ -61,7 +67,7 @@ class MatrixNanoPET(torch.nn.Module):
 
         edge_hidden_irreps = kwargs.pop("edge_hidden_irreps", None)
 
-        self.matrix_readouts = E3nnGraph2Mat(
+        self.matrix_readouts = graph2mat_cls(
             irreps=dict(
                 # node_attrs_irreps=self.mace.interactions[0].node_attrs_irreps,
                 node_feats_irreps=self.nanopet_out_irreps,
