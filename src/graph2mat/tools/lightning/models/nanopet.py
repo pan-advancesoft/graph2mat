@@ -4,6 +4,8 @@ from metatrain.utils.architectures import get_default_hypers
 from metatrain.utils.data.target_info import get_generic_target_info
 from metatrain.experimental.nanopet import NanoPET
 
+from metatrain.experimental.nativepet import NativePET
+
 from metatrain.utils.data import DatasetInfo
 
 from typing import Type, Union, Optional
@@ -92,12 +94,12 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
         target_info = get_generic_target_info(target)
 
         hypers = {
-            **get_default_hypers("experimental.nanopet")["model"],
+            **get_default_hypers("experimental.nativepet")["model"],
             "d_pet": d_pet,
             "num_gnn_layers": num_gnn_layers,
         }
 
-        nanopet = NanoPET(
+        nanopet = NativePET(
             hypers,
             DatasetInfo(
                 length_unit="angstrom",
@@ -123,8 +125,20 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
                 self.symmetry = symmetry
 
                 # self.linear = torch.nn.Linear(self.in_dim, 10 * self.out_shape[0])
-                self.linear = torch.nn.Linear(
-                    self.in_dim, self.out_shape[0] * self.out_shape[0]
+                # self.linear = torch.nn.Linear(
+                #     self.in_dim, self.out_shape[0] * self.out_shape[0]
+                # )
+
+                internal_size = 10
+                self.linear = torch.nn.Linear(self.in_dim, internal_size)
+
+                self.weights = torch.nn.Parameter(
+                    torch.zeros(
+                        internal_size,
+                        internal_size,
+                        self.out_shape[0],
+                        self.out_shape[1],
+                    )
                 )
 
                 # self.linear = torch.nn.Sequential(
@@ -134,12 +148,21 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
                 # )
 
             def forward(self, node_feats):
-                out = self.linear(node_feats)
+                # out = self.linear(node_feats)
 
                 # out = out.reshape(-1, 10, self.out_shape[0])
                 # return torch.einsum("bnx, bny -> bxy", out, out)
 
-                out = out.reshape(-1, self.out_shape[0], self.out_shape[0])
+                # out = out.reshape(-1, self.out_shape[0], self.out_shape[0])
+
+                node_feats = self.linear(node_feats)
+
+                out = torch.einsum(
+                    "ni, ijkl, nj -> nkl",
+                    node_feats,
+                    self.weights,
+                    node_feats,
+                )
 
                 return out
 
@@ -149,12 +172,35 @@ class LitNanoPETMatrixModel(LitBasisMatrixModel):
                 self.in_dim = num_subtargets * (1 + 3 + 5)
                 self.out_shape = (len(i_basis), len(j_basis))
 
-                self.linear1 = torch.nn.Linear(self.in_dim, 10 * self.out_shape[0])
-                self.linear2 = torch.nn.Linear(self.in_dim, 10 * self.out_shape[1])
+                # self.linear1 = torch.nn.Linear(self.in_dim, 10 * self.out_shape[0])
+                # self.linear2 = torch.nn.Linear(self.in_dim, 10 * self.out_shape[1])
+
+                internal_size = 10
+
+                self.linear = torch.nn.Linear(self.in_dim, internal_size)
+
+                self.weights = torch.nn.Parameter(
+                    torch.zeros(
+                        internal_size,
+                        internal_size,
+                        self.out_shape[0],
+                        self.out_shape[1],
+                    )
+                )
 
             def forward(self, node_feats):
-                out1 = self.linear1(node_feats[0]).reshape(-1, 10, self.out_shape[0])
-                out2 = self.linear2(node_feats[1]).reshape(-1, 10, self.out_shape[1])
+                # out1 = self.linear1(node_feats[0]).reshape(-1, 10, self.out_shape[0])
+                # out2 = self.linear2(node_feats[1]).reshape(-1, 10, self.out_shape[1])
+
+                out1 = self.linear(node_feats[0])
+                out2 = self.linear(node_feats[1])
+
+                return torch.einsum(
+                    "ni, ijkl, nj -> nkl",
+                    out1,
+                    self.weights,
+                    out2,
+                )
 
                 return torch.einsum("bnx, bny -> bxy", out1, out2)
 
